@@ -1,4 +1,4 @@
-INSTALL_DIR = /home/gtnoble/.local/bin
+INSTALL_DIR = ~/.local/bin
 CSC = csc
 CSC_FLAGS = -O3 -debug o -verbose
 CSC_SO_FLAGS = $(CSC_FLAGS) -s

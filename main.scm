@@ -47,6 +47,7 @@
   (display-error "  -h --help                                     Show this screen")
   (display-error "  -M --maximize                                 Maximize objective command, omit to minimize")
   (display-error "  -n --num-iterations                           Number of PSO iterations to run [default: 100]")
+  (display-error "  -j --num-processes                            Maximum number of simultaneous objective processes [default: 100]")
   (display-error "  -g <filename>, --initial-guesses=<filename>   Initial guesses for optimum objective function arguments")
   (exit 1))
 
@@ -63,6 +64,9 @@
                                     (lambda (operand name value . rest)
                                       (set! num-iterations (string->number value))))
                             (option '(#\h "help") #f #f print-help)
+                            (option '(#\j "num-processes") #t #f
+                                    (lambda (operand name value . rest)
+                                      (set! pool-size (string->number value))))
                             (option '(#\g "initial-guesses") #t #f
                                     (lambda (operand name filename . rest)
                                       (set! initial-positions (read-initial-positions-file filename)))))))
