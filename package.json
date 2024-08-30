@@ -1,0 +1,24 @@
+{
+  "name": "opty",
+  "version": "1.0.0",
+  "main": "opty.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Garret Noble",
+  "license": "MIT",
+  "description": "",
+  "devDependencies": {
+    "@types/node": "^22.5.1",
+    "@types/lodash": "^4.17.7",
+    "@types/yargs": "17.0.33",
+    "typescript": "^5.5.4"
+  },
+  "dependencies": {
+    "set-utilities": "^1.5.7",
+    "lodash": "^4.17.21",
+    "yargs": "^17.7.2",
+    "p-limit": "^6.1.0"
+  },
+  "type": "module"
+}

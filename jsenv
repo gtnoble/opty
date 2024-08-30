@@ -1,0 +1,11 @@
+#!/usr/bin/env zsh
+
+keyValuePairs=($(cat))
+echo $keyValuePairs >> "kv.log"
+
+for keyValuePair in ${(@)keyValuePairs}; do
+  kv=(${(@s:=:)keyValuePair})
+  export "${kv[1]}"="${kv[2]}"
+done
+
+$@
