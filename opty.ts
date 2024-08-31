@@ -17,15 +17,12 @@ import { particleSwarmOptimize } from './pso.js';
 
 const { zipWith } = Lodash;
 
-const argv = yargs(process.argv.slice(2)).options({
-  M: { type: 'boolean', default: false},
-  n: { type: 'number', default: 100, alias: "num-iterations"},
-  g: { type: 'string', demandOption: true, alias: "initial-positions"},
-  j: { type: 'number', default: 16, alias: "num-workers"}
-}).parseSync();
+
 
 export type ParticlePosition = Array<number>
 type ParticleHeader = Set<string>
+export type PositionPacket = ParticlePosition[]
+export type ValuePacket = number[]
 
 function readParticlesFile(filename: string) {
   const configData = readFileSync(filename, {encoding: "utf-8"});
@@ -58,17 +55,27 @@ function readParticlesFile(filename: string) {
   }
 }
 
+function serializeParticle(header: ParticleHeader, position: ParticlePosition) {
+  return zipWith(
+    Array.from(header), 
+    position, 
+    (variableName, coordinate) => `${variableName}=${coordinate}`
+  ).join(' ') + "\n";
+}
+
 function writeParticle(
   position: ParticlePosition, 
   header: ParticleHeader, 
   outputStream: Writable
 ) {
-  const serializedParticle = zipWith(
-    Array.from(header), 
-    position, 
-    (variableName, coordinate) => `${variableName}=${coordinate}`
-  ).join(' ') + "\n";
-  outputStream.write(serializedParticle);
+  //await waitForPipe(outputStream)
+  outputStream.write(serializeParticle(header, position));
+}
+
+function waitForEnd(stream: Readable): Promise<void> {
+  return new Promise((resolve, reject) => {
+    stream.once("end", () => resolve())
+  })
 }
 
 function runChild(
@@ -77,26 +84,38 @@ function runChild(
   particleHeader: ParticleHeader,
   negate:boolean = false
 ) {
-  const readFunctionValue = async (inputStream: Readable) => {
-    const resultText: string = await inputStream.reduce(
-      (accumulatedLine: string, chunk) => {
-      accumulatedLine += chunk.toString();
-      return accumulatedLine
-    }, "")
-    const parsedValue = Number(resultText.split("\n")[0]);
-    return parsedValue * (negate ? -1 : 1);
-  }
   
-  return async (particlePosition: ParticlePosition) => {
+  return async (particlePositions: PositionPacket): Promise<ValuePacket> => {
     const child = spawn(command, args, {stdio: ["pipe", "pipe", "inherit"]});
-    writeParticle(particlePosition, particleHeader, child.stdin);
-    child.stdin.end();
-    return await readFunctionValue(child.stdout);
+    
+    for (const position of particlePositions) {
+      child.stdin.write(serializeParticle(particleHeader, position))
+    }
+
+    let data = ""
+    child.stdout.on("data", 
+      (chunk) => {
+        data += chunk.toString()
+      })
+    child.stdin.end()
+    await waitForEnd(child.stdout);
+
+    const lines = data.trim().split("\n")
+    const values = lines.map((line) => parseFloat(line) * (negate ? -1 : 1))
+    return values;
   }
 }
 
+const argv = yargs(process.argv.slice(2)).options({
+  maximize: { type: 'boolean', default: false, alias: "M"},
+  numIterations: { type: 'number', default: 100, alias: "n"},
+  initialPositions: { type: 'string', demandOption: true, alias: "g"},
+  numWorkers: { type: 'number', default: 16, alias: "j"},
+  workPacketSize: { type: 'number', default: 10, alias: "p"}
+}).parseSync();
+
 async function main() {
-  const particles = readParticlesFile(argv.g);
+  const particles = readParticlesFile(argv.initialPositions);
   const fullCommand = argv._.map((arg) => arg.toString());
   const command = fullCommand[0];
   const commandArgs = fullCommand.slice(1);
@@ -104,13 +123,14 @@ async function main() {
     command, 
     commandArgs, 
     particles.header, 
-    argv.M
+    argv.maximize,
   );
   const optimizedPoint = await particleSwarmOptimize(
     particles.positions, 
     objectiveFunction, 
-    argv.n, 
-    argv.j
+    argv.numIterations, 
+    argv.numWorkers,
+    argv.workPacketSize
   );
   writeParticle(optimizedPoint.position, particles.header, process.stdout);
 }

@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "main": "opty.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "npx tsc",
+    "preinstall": "npm run build"
   },
   "author": "Garret Noble",
   "license": "MIT",
@@ -19,6 +21,9 @@
     "lodash": "^4.17.21",
     "yargs": "^17.7.2",
     "p-limit": "^6.1.0"
+  },
+  "bin": {
+    "opty": "dist/opty.js"
   },
   "type": "module"
 }

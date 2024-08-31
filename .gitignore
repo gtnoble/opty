@@ -1,3 +1,6 @@
 *.link
 opty
 *.swp
+node_modules
+test
+dist

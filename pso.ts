@@ -1,3 +1,4 @@
+import assert from 'assert/strict';
 import Lodash from 'lodash';
 import pLimit from 'p-limit';
 
@@ -7,7 +8,7 @@ const { zipWith } = Lodash
 
 const square = (x: number) => Math.pow(x, 2);
 
-type ObjectiveFunction = (position: ParticlePosition) => Promise<number>;
+type ObjectiveFunction = (position: ParticlePosition[]) => Promise<number[]>;
 
 interface ParticleState {
   position: ParticlePosition,
@@ -27,7 +28,13 @@ function selectOptimumEnergyState(
   state1: ParticleState, 
   state2: ParticleState
 ) {
-  if (state1.energy < state2.energy) {
+  if (isNaN(state1.energy) && ! isNaN(state2.energy)) {
+    return state2;
+  }
+  else if (! isNaN(state1.energy) && isNaN(state2.energy)) {
+    return state1;
+  }
+  else if (state1.energy < state2.energy) {
     return state1;
   }
   else {
@@ -79,13 +86,18 @@ function updatePosition(
 async function evaluatePositions(
   particlePositions: Array<ParticlePosition>, 
   objectiveFunction: ObjectiveFunction,
-  numWorkers: number
+  numWorkers: number,
+  packetSize: number
 ): Promise<ParticleState[]> {
+  const positionPackets = splitToPackets(particlePositions, packetSize);
   const limit = pLimit(numWorkers);
+  const functionValues = joinPackets(
+    await Promise.all(positionPackets.map(
+      (position) => limit(() => objectiveFunction(position))))
+    );
   return zipWith(
     particlePositions,
-    await Promise.all(particlePositions.map(
-      (position) => limit(() => objectiveFunction(position)))),
+    functionValues,
     (particlePosition, particleEnergy) => ({
       position: particlePosition,
       energy: particleEnergy
@@ -95,28 +107,49 @@ async function evaluatePositions(
 function updateStates(
   bestParticleStates: Array<ParticleState>,
   objectiveFunction: ObjectiveFunction,
-  numWorkers: number
-) {
+  numWorkers: number,
+  packetSize: number,
+): Promise<ParticleState[]> {
   const globalBestState = getBestState(bestParticleStates);
   const updatedPositions = bestParticleStates.map(
     (particleState) => updatePosition(
       particleState.position, globalBestState.position
     ))
-  return evaluatePositions(updatedPositions, objectiveFunction, numWorkers);
+  return evaluatePositions(updatedPositions, objectiveFunction, numWorkers, packetSize);
+}
+
+function splitToPackets<T>(elements: T[], packetSize: number): T[][] {
+  const initial: T[][] = [[]];
+  return elements.reduce((packets, position) => {
+    const currentPacket = packets.at(-1);
+    assert(currentPacket !== undefined);
+    if (currentPacket.length === packetSize) {
+      packets.push([position]);
+    }
+    else {
+      currentPacket.push(position);
+    }
+    return packets;
+  }, initial)
+}
+
+function joinPackets<T>(packets: T[][]): T[] {
+  return packets.flat()
 }
 
 export async function particleSwarmOptimize(
   initialPositions: Array<ParticlePosition>, 
   objectiveFunction: ObjectiveFunction,
   maxIterations: number,
-  numWorkers: number
+  numWorkers: number,
+  packetSize: number
 ) {
   let bestStates = await evaluatePositions(
-    initialPositions, objectiveFunction, numWorkers
+    initialPositions, objectiveFunction, numWorkers, packetSize
   );
   for (let i = 0; i < maxIterations; i++) {
     const candidateStates = await updateStates(
-      bestStates, objectiveFunction, numWorkers
+      bestStates, objectiveFunction, numWorkers, packetSize
     );
     bestStates = zipWith(candidateStates, bestStates, selectOptimumEnergyState);
   }
